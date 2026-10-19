@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Resultados – Coevaluación</title>
+<link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+<header class="barra">
+  <div class="cont">
+    <div class="sup">Universidad UTE · Taller Estructural II · Docente</div>
+    <h1>Resultados de la coevaluación</h1>
+    <p>El futuro de las estructuras metálicas</p>
+  </div>
+</header>
+
+<main>
+  <section class="caja" id="acceso">
+    <h2>Acceso del docente</h2>
+    <p class="ayuda">Ingrese el PIN que configuró en el Apps Script.</p>
+    <label class="campo" for="pin">PIN</label>
+    <input type="password" id="pin" autocomplete="off">
+    <button class="btn" id="btnVer">Ver resultados</button>
+    <div id="avisoAcceso"></div>
+  </section>
+
+  <section class="oculto" id="panel">
+    <div class="caja">
+      <div class="fila-botones">
+        <button class="btn sec" id="btnActualizar">↻ Actualizar</button>
+        <button class="btn sec" id="btnCSV">⬇ Descargar notas (CSV / Excel)</button>
+      </div>
+      <p class="ayuda" id="actualizado" style="margin:10px 0 0"></p>
+    </div>
+
+    <div class="caja">
+      <h2>Notas por grupo</h2>
+      <p class="ayuda">Promedio de las evaluaciones de los compañeros (sobre 10) y promedio por criterio (sobre 2).</p>
+      <div class="tabla-env"><table id="tablaGrupos"></table></div>
+    </div>
+
+    <div class="caja">
+      <h2>Participación de cada estudiante</h2>
+      <p class="ayuda">Cuántos grupos evaluó cada estudiante (debe evaluar a todos menos al suyo).</p>
+      <div class="tabla-env"><table id="tablaPart"></table></div>
+    </div>
+  </section>
+</main>
+
+<script src="config.js"></script>
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  let datos = null, pin = '';
+
+  function el(tag, txt, cls) { const e = document.createElement(tag); if (txt !== undefined && txt !== null) e.textContent = txt; if (cls) e.className = cls; return e; }
+  function aviso(tipo, texto) { $('avisoAcceso').replaceChildren(el('div', texto, 'aviso ' + tipo)); }
+  const fmt = (x) => (x === null || x === undefined) ? '–' : String(x).replace('.', ',');
+
+  async function cargar() {
+    if (!window.SCRIPT_URL || window.SCRIPT_URL.indexOf('https://script.google.com/') !== 0) { aviso('error', 'Falta pegar la URL del Apps Script en config.js.'); return; }
+    aviso('info', 'Cargando…');
+    try {
+      const r = await fetch(window.SCRIPT_URL + '?accion=resultados&pin=' + encodeURIComponent(pin));
+      const d = await r.json();
+      if (!d.ok) { aviso('error', d.error || 'No se pudo cargar.'); return; }
+      datos = d;
+      $('avisoAcceso').replaceChildren();
+      $('acceso').classList.add('oculto');
+      $('panel').classList.remove('oculto');
+      pintar();
+    } catch (e) { aviso('error', 'Sin conexión con el servidor.'); }
+  }
+
+  function pintar() {
+    $('actualizado').textContent = 'Actualizado: ' + new Date(datos.actualizado).toLocaleString('es-EC');
+    // Tabla de grupos
+    const t = $('tablaGrupos'); t.replaceChildren();
+    const h = el('tr');
+    ['Grupo', 'Tema e integrantes', 'N.º eval.', 'Nota /10'].concat(datos.criterios).forEach((x, i) => h.appendChild(el('th', x, i === 1 ? '' : 'n')));
+    const thead = el('thead'); thead.appendChild(h); t.appendChild(thead);
+    const tb = el('tbody');
+    datos.grupos.forEach(g => {
+      const tr = el('tr');
+      tr.appendChild(el('td', g.grupo, 'n'));
+      const td = el('td');
+      td.appendChild(el('b', g.tema));
+      td.appendChild(el('div', g.integrantes.join(' · ')));
+      if (g.comentarios.length) {
+        const det = el('details'); det.appendChild(el('summary', 'Ver comentarios (' + g.comentarios.length + ')'));
+        const ul = el('ul');
+        g.comentarios.forEach(c => {
+          const li = el('li');
+          li.appendChild(el('span', '👍 ' + c.fortaleza));
+          if (c.sugerencia) { li.appendChild(el('br')); li.appendChild(el('span', '💡 ' + c.sugerencia)); }
+          ul.appendChild(li);
+        });
+        det.appendChild(ul); td.appendChild(det);
+      }
+      tr.appendChild(td);
+      tr.appendChild(el('td', g.n, 'n'));
+      const nota = el('td', null, 'n'); nota.appendChild(el('b', fmt(g.promedio))); tr.appendChild(nota);
+      g.criterios.forEach(c => tr.appendChild(el('td', fmt(c), 'n')));
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb);
+
+    // Participación
+    const p = $('tablaPart'); p.replaceChildren();
+    const hp = el('tr'); ['Estudiante', 'Grupo', 'Evaluó', 'Estado'].forEach((x, i) => hp.appendChild(el('th', x, i ? 'n' : '')));
+    const thp = el('thead'); thp.appendChild(hp); p.appendChild(thp);
+    const tbp = el('tbody');
+    datos.participacion.forEach(s => {
+      const tr = el('tr');
+      tr.appendChild(el('td', s.nombre));
+      tr.appendChild(el('td', s.grupo, 'n'));
+      tr.appendChild(el('td', s.evaluados + ' / ' + s.total, 'n'));
+      const est = el('td', null, 'n');
+      est.appendChild(el('span', s.evaluados >= s.total ? 'Completo' : 'Faltan ' + (s.total - s.evaluados), 'chip ' + (s.evaluados >= s.total ? 'ok' : 'falta')));
+      tr.appendChild(est);
+      tbp.appendChild(tr);
+    });
+    p.appendChild(tbp);
+  }
+
+  function csv() {
+    const q = (v) => '"' + String(v === null || v === undefined ? '' : v).replace(/"/g, '""') + '"';
+    const filas = [['Estudiante', 'Grupo', 'Tema', 'Nota coevaluación /10', 'N.º evaluaciones recibidas', 'Grupos que evaluó', 'Total a evaluar']];
+    datos.participacion.forEach(s => {
+      const g = datos.grupos.find(x => x.grupo === s.grupo);
+      filas.push([s.nombre, s.grupo, g.tema, g.promedio === null ? '' : String(g.promedio).replace('.', ','), g.n, s.evaluados, s.total]);
+    });
+    const texto = '﻿' + filas.map(f => f.map(q).join(';')).join('\r\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([texto], { type: 'text/csv;charset=utf-8' }));
+    a.download = 'coevaluacion_taller_futuro_acero.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+
+  $('btnVer').addEventListener('click', () => { pin = $('pin').value; cargar(); });
+  $('pin').addEventListener('keydown', (e) => { if (e.key === 'Enter') { pin = $('pin').value; cargar(); } });
+  $('btnActualizar').addEventListener('click', cargar);
+  $('btnCSV').addEventListener('click', csv);
+})();
+</script>
+</body>
+</html>

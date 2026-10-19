@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Coevaluación – Taller Estructural II</title>
+<link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+<header class="barra">
+  <div class="cont">
+    <div class="sup">Universidad UTE · Taller Estructural II</div>
+    <h1>Coevaluación de exposiciones</h1>
+    <p id="subtitulo">El futuro de las estructuras metálicas</p>
+  </div>
+</header>
+
+<main>
+  <!-- Paso 1: identificación -->
+  <section class="caja" id="paso1">
+    <h2><span class="paso">1</span>¿Quién evalúa?</h2>
+    <p class="ayuda">Elija su nombre y escriba el código que el docente dará en clase.</p>
+    <label class="campo" for="evaluador">Su nombre</label>
+    <select id="evaluador"><option value="">— Seleccione su nombre —</option></select>
+    <label class="campo" for="codigo">Código de la clase</label>
+    <input type="text" id="codigo" autocomplete="off" autocapitalize="characters" placeholder="Código dado por el docente">
+    <button class="btn" id="btnEntrar" disabled>Continuar</button>
+    <div id="avisoPaso1"></div>
+  </section>
+
+  <!-- Paso 2: lista de grupos -->
+  <section class="caja oculto" id="paso2">
+    <div class="cabeza-eval">
+      <div>
+        <h2><span class="paso">2</span>Elija el grupo que va a evaluar</h2>
+        <p class="ayuda" id="saludo"></p>
+      </div>
+      <button class="volver" id="btnCambiar">Cambiar nombre</button>
+    </div>
+    <p class="progreso" id="progreso"></p>
+    <div class="grid" id="listaGrupos"></div>
+  </section>
+
+  <!-- Paso 3: rúbrica -->
+  <section class="caja oculto" id="paso3">
+    <div class="cabeza-eval">
+      <div>
+        <h2 id="tituloEval"><span class="paso">3</span>Evaluación</h2>
+        <p class="ayuda" id="detalleEval"></p>
+      </div>
+      <button class="volver" id="btnVolver">← Grupos</button>
+    </div>
+    <div id="criterios"></div>
+    <div class="total"><span>Nota para este grupo</span><span class="nota"><span id="nota">–</span> / 10</span></div>
+    <label class="campo" for="fortaleza">Lo mejor de la exposición <span style="font-weight:400;color:var(--suave)">(obligatorio)</span></label>
+    <textarea id="fortaleza" maxlength="300" placeholder="Ej.: explicaron muy bien el ejemplo del proyecto real…"></textarea>
+    <label class="campo" for="sugerencia">Una sugerencia para mejorar <span style="font-weight:400;color:var(--suave)">(opcional)</span></label>
+    <textarea id="sugerencia" maxlength="300" placeholder="Ej.: el croquis podría tener más detalle…"></textarea>
+    <button class="btn" id="btnEnviar" disabled>Enviar evaluación</button>
+    <div id="avisoEval"></div>
+    <p class="ayuda" style="margin-top:10px">Si se equivoca, puede volver a evaluar al mismo grupo: se guarda la última evaluación enviada.</p>
+  </section>
+</main>
+
+<p class="pie">Evalúe con honestidad y respeto. La nota de cada grupo es el promedio de las evaluaciones de sus compañeros. No se puede evaluar al grupo propio.</p>
+
+<script src="datos.js"></script>
+<script src="config.js"></script>
+<script>
+(function () {
+  const T = window.TALLER;
+  const URL_API = window.SCRIPT_URL;
+  const $ = (id) => document.getElementById(id);
+
+  // ---- almacenamiento local (opcional, protegido) ----
+  const mem = {
+    get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+    del(k) { try { localStorage.removeItem(k); } catch (e) {} },
+  };
+
+  const estado = { evaluador: '', codigo: '', grupoPropio: null, hechos: new Set(), grupoActual: null, valores: {} };
+
+  // ---- lista de estudiantes ----
+  const estudiantes = [];
+  T.grupos.forEach(g => g.integrantes.forEach(n => estudiantes.push({ nombre: n, grupo: g.n })));
+  estudiantes.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  const sel = $('evaluador');
+  estudiantes.forEach(e => {
+    const o = document.createElement('option');
+    o.value = e.nombre; o.textContent = e.nombre;
+    sel.appendChild(o);
+  });
+
+  function validarPaso1() { $('btnEntrar').disabled = !(sel.value && $('codigo').value.trim()); }
+  sel.addEventListener('change', validarPaso1);
+  $('codigo').addEventListener('input', validarPaso1);
+
+  function aviso(contenedor, tipo, texto) {
+    const d = document.createElement('div');
+    d.className = 'aviso ' + tipo;
+    d.textContent = texto;
+    contenedor.replaceChildren(d);
+  }
+
+  function apiConfigurada() {
+    return URL_API && URL_API.indexOf('https://script.google.com/') === 0;
+  }
+
+  // ---- entrar ----
+  $('btnEntrar').addEventListener('click', async () => {
+    if (!apiConfigurada()) { aviso($('avisoPaso1'), 'error', 'La página aún no está conectada a la hoja de notas. Avise al docente.'); return; }
+    estado.evaluador = sel.value;
+    estado.codigo = $('codigo').value.trim().toUpperCase();
+    estado.grupoPropio = estudiantes.find(e => e.nombre === estado.evaluador).grupo;
+    mem.set('coev_evaluador', estado.evaluador);
+    mem.set('coev_codigo', estado.codigo);
+    $('btnEntrar').disabled = true;
+    aviso($('avisoPaso1'), 'info', 'Verificando…');
+    try {
+      const r = await fetch(URL_API + '?accion=misEvaluaciones&evaluador=' + encodeURIComponent(estado.evaluador) + '&codigo=' + encodeURIComponent(estado.codigo));
+      const d = await r.json();
+      if (!d.ok) { aviso($('avisoPaso1'), 'error', d.error || 'No se pudo verificar.'); $('btnEntrar').disabled = false; return; }
+      estado.hechos = new Set(d.grupos || []);
+      $('avisoPaso1').replaceChildren();
+      mostrarGrupos();
+    } catch (e) {
+      aviso($('avisoPaso1'), 'error', 'Sin conexión con el servidor. Revise su internet e intente de nuevo.');
+      $('btnEntrar').disabled = false;
+    }
+  });
+
+  $('btnCambiar').addEventListener('click', () => {
+    mem.del('coev_evaluador');
+    $('paso2').classList.add('oculto');
+    $('paso1').classList.remove('oculto');
+    validarPaso1();
+  });
+
+  // ---- lista de grupos ----
+  function mostrarGrupos() {
+    $('paso1').classList.add('oculto');
+    $('paso3').classList.add('oculto');
+    $('paso2').classList.remove('oculto');
+    $('saludo').textContent = 'Evaluador: ' + estado.evaluador + ' (Grupo ' + estado.grupoPropio + ')';
+    const total = T.grupos.length - 1;
+    const hechos = [...estado.hechos].filter(n => n !== estado.grupoPropio).length;
+    $('progreso').innerHTML = '';
+    const b = document.createElement('b'); b.textContent = hechos + ' de ' + total;
+    $('progreso').append('Ha evaluado ', b, ' grupos.' + (hechos === total ? ' ¡Completó todas las evaluaciones, gracias!' : ''));
+    const cont = $('listaGrupos');
+    cont.replaceChildren();
+    T.grupos.forEach(g => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'grupo';
+      const propio = g.n === estado.grupoPropio;
+      const hecho = estado.hechos.has(g.n);
+      if (propio) { btn.classList.add('propio'); btn.disabled = true; }
+      else if (hecho) btn.classList.add('hecho');
+      const num = document.createElement('span'); num.className = 'num'; num.textContent = 'Grupo ' + g.n;
+      const tema = document.createElement('span'); tema.className = 'tema'; tema.textContent = g.tema;
+      const int = document.createElement('span'); int.className = 'int'; int.textContent = g.integrantes.join(' · ');
+      btn.append(num, tema, int);
+      if (propio || hecho) {
+        const est = document.createElement('span'); est.className = 'estado';
+        est.textContent = propio ? 'Su grupo' : '✓ Evaluado';
+        btn.appendChild(est);
+      }
+      if (!propio) btn.addEventListener('click', () => abrirEvaluacion(g));
+      cont.appendChild(btn);
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // ---- rúbrica ----
+  function abrirEvaluacion(g) {
+    estado.grupoActual = g;
+    estado.valores = {};
+    $('paso2').classList.add('oculto');
+    $('paso3').classList.remove('oculto');
+    $('tituloEval').innerHTML = '<span class="paso">3</span>';
+    $('tituloEval').append('Grupo ' + g.n);
+    $('detalleEval').textContent = g.tema + ' — ' + g.integrantes.join(' y ');
+    $('fortaleza').value = '';
+    $('sugerencia').value = '';
+    $('avisoEval').replaceChildren();
+    const cont = $('criterios');
+    cont.replaceChildren();
+    T.criterios.forEach(c => {
+      const div = document.createElement('div'); div.className = 'criterio';
+      const nom = document.createElement('div'); nom.className = 'nom'; nom.textContent = c.nombre;
+      const desc = document.createElement('div'); desc.className = 'desc'; desc.textContent = c.descripcion;
+      const niv = document.createElement('div'); niv.className = 'niveles'; niv.setAttribute('role', 'group'); niv.setAttribute('aria-label', c.nombre);
+      T.niveles.forEach(n => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'nivel'; b.dataset.v = n.valor; b.setAttribute('aria-pressed', 'false');
+        const bb = document.createElement('b'); bb.textContent = n.valor;
+        b.append(bb, n.nombre);
+        b.addEventListener('click', () => {
+          estado.valores[c.id] = n.valor;
+          niv.querySelectorAll('.nivel').forEach(x => x.setAttribute('aria-pressed', x === b ? 'true' : 'false'));
+          actualizarTotal();
+        });
+        niv.appendChild(b);
+      });
+      div.append(nom, desc, niv);
+      cont.appendChild(div);
+    });
+    actualizarTotal();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function completo() { return T.criterios.every(c => estado.valores[c.id] !== undefined); }
+  function actualizarTotal() {
+    const suma = T.criterios.reduce((s, c) => s + (estado.valores[c.id] || 0), 0);
+    $('nota').textContent = completo() ? suma : '–';
+    $('btnEnviar').disabled = !(completo() && $('fortaleza').value.trim().length >= 5);
+  }
+  $('fortaleza').addEventListener('input', actualizarTotal);
+  $('btnVolver').addEventListener('click', mostrarGrupos);
+
+  // ---- enviar ----
+  $('btnEnviar').addEventListener('click', async () => {
+    const g = estado.grupoActual;
+    const datos = {
+      evaluador: estado.evaluador,
+      codigo: estado.codigo,
+      grupo: g.n,
+      fortaleza: $('fortaleza').value.trim(),
+      sugerencia: $('sugerencia').value.trim(),
+    };
+    T.criterios.forEach(c => { datos[c.id] = estado.valores[c.id]; });
+    $('btnEnviar').disabled = true;
+    aviso($('avisoEval'), 'info', 'Enviando…');
+    try {
+      // text/plain evita la verificación CORS previa de Google Apps Script
+      const r = await fetch(URL_API, { method: 'POST', body: JSON.stringify(datos) });
+      const d = await r.json();
+      if (!d.ok) { aviso($('avisoEval'), 'error', d.error || 'No se pudo guardar.'); $('btnEnviar').disabled = false; return; }
+      estado.hechos.add(g.n);
+      mostrarGrupos();
+      aviso($('progreso'), 'ok', '✓ Evaluación del Grupo ' + g.n + ' guardada (' + d.total + '/10). Elija el siguiente grupo.');
+      setTimeout(mostrarGrupos, 3500);
+    } catch (e) {
+      aviso($('avisoEval'), 'error', 'Sin conexión con el servidor. Su evaluación no se guardó: intente de nuevo.');
+      $('btnEnviar').disabled = false;
+    }
+  });
+
+  // ---- recordar al estudiante en este dispositivo ----
+  const prev = mem.get('coev_evaluador');
+  if (prev && estudiantes.some(e => e.nombre === prev)) sel.value = prev;
+  const cod = mem.get('coev_codigo');
+  if (cod) $('codigo').value = cod;
+  validarPaso1();
+})();
+</script>
+</body>
+</html>
