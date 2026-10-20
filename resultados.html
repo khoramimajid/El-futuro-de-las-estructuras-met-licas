@@ -30,14 +30,14 @@
     <div class="caja">
       <div class="fila-botones">
         <button class="btn sec" id="btnActualizar">↻ Actualizar</button>
-        <button class="btn sec" id="btnCSV">⬇ Descargar notas (CSV / Excel)</button>
+        <button class="btn sec" id="btnCSV">⬇ Descargar reporte en Excel</button>
       </div>
       <p class="ayuda" id="actualizado" style="margin:10px 0 0"></p>
     </div>
 
     <div class="caja">
       <h2>Notas por grupo</h2>
-      <p class="ayuda">Promedio de las evaluaciones de los compañeros (sobre 10) y promedio por criterio (sobre 2).</p>
+      <p class="ayuda">Nota promedio de los compañeros (sobre 10), rango mínimo–máximo y promedio de cada criterio (escala 1 a 5).</p>
       <div class="tabla-env"><table id="tablaGrupos"></table></div>
     </div>
 
@@ -49,7 +49,9 @@
   </section>
 </main>
 
+<script src="datos.js"></script>
 <script src="config.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script>
 (function () {
   const $ = (id) => document.getElementById(id);
@@ -79,7 +81,7 @@
     // Tabla de grupos
     const t = $('tablaGrupos'); t.replaceChildren();
     const h = el('tr');
-    ['Grupo', 'Tema e integrantes', 'N.º eval.', 'Nota /10'].concat(datos.criterios).forEach((x, i) => h.appendChild(el('th', x, i === 1 ? '' : 'n')));
+    ['Grupo', 'Tema e integrantes', 'N.º eval.', 'Nota /10', 'Mín – Máx'].concat(datos.criterios).forEach((x, i) => h.appendChild(el('th', x, i === 1 ? '' : 'n')));
     const thead = el('thead'); thead.appendChild(h); t.appendChild(thead);
     const tb = el('tbody');
     datos.grupos.forEach(g => {
@@ -102,6 +104,7 @@
       tr.appendChild(td);
       tr.appendChild(el('td', g.n, 'n'));
       const nota = el('td', null, 'n'); nota.appendChild(el('b', fmt(g.promedio))); tr.appendChild(nota);
+      tr.appendChild(el('td', g.n ? fmt(g.minimo) + ' – ' + fmt(g.maximo) : '–', 'n'));
       g.criterios.forEach(c => tr.appendChild(el('td', fmt(c), 'n')));
       tb.appendChild(tr);
     });
@@ -125,24 +128,121 @@
     p.appendChild(tbp);
   }
 
-  function csv() {
-    const q = (v) => '"' + String(v === null || v === undefined ? '' : v).replace(/"/g, '""') + '"';
-    const filas = [['Estudiante', 'Grupo', 'Tema', 'Nota coevaluación /10', 'N.º evaluaciones recibidas', 'Grupos que evaluó', 'Total a evaluar']];
-    datos.participacion.forEach(s => {
+  async function excel() {
+    if (!window.ExcelJS) { alert('No se pudo cargar el generador de Excel. Revise su conexión.'); return; }
+    const T = window.TALLER || {};
+    const AZUL = 'FF1D4F9C', AZUL_CLARO = 'FFE8EFF9', GRIS = 'FFF4F6FA';
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Coevaluación UTE';
+    const fecha = new Date().toLocaleString('es-EC');
+    const borde = { top: { style: 'thin', color: { argb: 'FFC9D1DE' } }, bottom: { style: 'thin', color: { argb: 'FFC9D1DE' } }, left: { style: 'thin', color: { argb: 'FFC9D1DE' } }, right: { style: 'thin', color: { argb: 'FFC9D1DE' } } };
+
+    function hoja(nombre, titulo, columnas) {
+      const ws = wb.addWorksheet(nombre, { views: [{ state: 'frozen', ySplit: 5 }], pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 } });
+      ws.columns = columnas.map(c => ({ key: c.key, width: c.ancho }));
+      const n = columnas.length;
+      ws.mergeCells(1, 1, 1, n); ws.getCell(1, 1).value = 'UNIVERSIDAD UTE – FACULTAD DE ARQUITECTURA Y URBANISMO';
+      ws.getCell(1, 1).font = { bold: true, size: 11, color: { argb: 'FF5B6576' } };
+      ws.mergeCells(2, 1, 2, n); ws.getCell(2, 1).value = titulo;
+      ws.getCell(2, 1).font = { bold: true, size: 15, color: { argb: AZUL } };
+      ws.mergeCells(3, 1, 3, n); ws.getCell(3, 1).value = (T.asignatura || 'Taller Estructural II') + ' · Taller: ' + (T.titulo || '') + ' · Docente: ' + (T.docente || '') + ' · Generado: ' + fecha;
+      ws.getCell(3, 1).font = { italic: true, size: 10, color: { argb: 'FF5B6576' } };
+      const h = ws.getRow(5);
+      columnas.forEach((c, i) => { const cell = h.getCell(i + 1); cell.value = c.titulo; cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }; cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: AZUL } }; cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }; cell.border = borde; });
+      h.height = 48;
+      return ws;
+    }
+    function fila(ws, valores, columnas, par) {
+      const r = ws.addRow(valores);
+      columnas.forEach((c, i) => {
+        const cell = r.getCell(i + 1);
+        cell.border = borde;
+        cell.alignment = { vertical: 'top', horizontal: c.centro ? 'center' : 'left', wrapText: true };
+        if (c.fmt) cell.numFmt = c.fmt;
+        if (par) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GRIS } };
+      });
+      return r;
+    }
+    function colorNota(cell, v) {
+      if (v === null || v === undefined || v === '') return;
+      const argb = v >= 9 ? 'FFD7F0DF' : v >= 7 ? 'FFFFF1D6' : 'FFFADBD8';
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb } };
+      cell.font = { bold: true };
+    }
+
+    // Hoja 1: notas por estudiante
+    const c1 = [
+      { key: 'n', titulo: 'N.º', ancho: 6, centro: true },
+      { key: 'est', titulo: 'Estudiante', ancho: 36 },
+      { key: 'g', titulo: 'Grupo', ancho: 8, centro: true },
+      { key: 'tema', titulo: 'Tema expuesto', ancho: 44 },
+      { key: 'nota', titulo: 'Nota coevaluación (/10)', ancho: 14, centro: true, fmt: '0.00' },
+      { key: 'rec', titulo: 'Evaluaciones recibidas', ancho: 13, centro: true },
+      { key: 'hizo', titulo: 'Grupos que evaluó', ancho: 12, centro: true },
+      { key: 'part', titulo: 'Participación como evaluador', ancho: 16, centro: true },
+    ];
+    const ws1 = hoja('Notas por estudiante', 'Reporte de notas – Coevaluación de exposiciones', c1);
+    datos.participacion.forEach((s, i) => {
       const g = datos.grupos.find(x => x.grupo === s.grupo);
-      filas.push([s.nombre, s.grupo, g.tema, g.promedio === null ? '' : String(g.promedio).replace('.', ','), g.n, s.evaluados, s.total]);
+      const r = fila(ws1, [i + 1, s.nombre, s.grupo, g.tema, g.promedio === null ? '' : g.promedio, g.n, s.evaluados + ' / ' + s.total, s.evaluados >= s.total ? 'Completa' : 'Incompleta (faltan ' + (s.total - s.evaluados) + ')'], c1, i % 2 === 1);
+      colorNota(r.getCell(5), g.promedio);
+      if (s.evaluados < s.total) r.getCell(8).font = { color: { argb: 'FFB26A00' }, bold: true };
     });
-    const texto = '﻿' + filas.map(f => f.map(q).join(';')).join('\r\n');
+    ws1.addRow([]);
+    const nota1 = ws1.addRow(['', 'Escala de colores: verde ≥ 9 · amarillo 7 – 8,99 · rojo < 7. La nota del estudiante es el promedio que su grupo recibió de los compañeros.']);
+    ws1.mergeCells(nota1.number, 2, nota1.number, 8); nota1.getCell(2).font = { italic: true, size: 9, color: { argb: 'FF5B6576' } };
+
+    // Hoja 2: notas por grupo y criterio
+    const crit = datos.criterios || [];
+    const c2 = [
+      { key: 'g', titulo: 'Grupo', ancho: 8, centro: true },
+      { key: 'tema', titulo: 'Tema', ancho: 38 },
+      { key: 'int', titulo: 'Integrantes', ancho: 38 },
+      { key: 'n', titulo: 'N.º evaluaciones', ancho: 12, centro: true },
+      { key: 'nota', titulo: 'Nota promedio (/10)', ancho: 13, centro: true, fmt: '0.00' },
+      { key: 'min', titulo: 'Nota mínima', ancho: 10, centro: true, fmt: '0.0' },
+      { key: 'max', titulo: 'Nota máxima', ancho: 10, centro: true, fmt: '0.0' },
+    ].concat(crit.map((c, i) => ({ key: 'c' + i, titulo: c + ' (1–5)', ancho: 13, centro: true, fmt: '0.00' })));
+    const ws2 = hoja('Notas por grupo', 'Resultados por grupo y por criterio', c2);
+    datos.grupos.forEach((g, i) => {
+      const r = fila(ws2, [g.grupo, g.tema, g.integrantes.join('\n'), g.n, g.promedio === null ? '' : g.promedio, g.minimo === null || g.minimo === undefined ? '' : g.minimo, g.maximo === null || g.maximo === undefined ? '' : g.maximo].concat(g.criterios.map(v => v === null ? '' : v)), c2, i % 2 === 1);
+      colorNota(r.getCell(5), g.promedio);
+    });
+
+    // Hoja 3: comentarios
+    const c3 = [
+      { key: 'g', titulo: 'Grupo', ancho: 8, centro: true },
+      { key: 'tema', titulo: 'Tema', ancho: 34 },
+      { key: 'ev', titulo: 'Evaluador', ancho: 30 },
+      { key: 'f', titulo: 'Lo mejor de la exposición', ancho: 55 },
+      { key: 's', titulo: 'Sugerencia', ancho: 55 },
+    ];
+    const ws3 = hoja('Comentarios', 'Comentarios de los compañeros', c3);
+    let k = 0;
+    datos.grupos.forEach(g => g.comentarios.forEach(c => { fila(ws3, [g.grupo, g.tema, c.evaluador || '', c.fortaleza, c.sugerencia], c3, (k++) % 2 === 1); }));
+
+    // Hoja 4: rúbrica utilizada
+    if (T.criterios && T.niveles) {
+      const niv = T.niveles.slice().sort((a, b) => b.valor - a.valor);
+      const c4 = [{ key: 'c', titulo: 'Criterio (2 puntos c/u)', ancho: 24 }].concat(niv.map(n => ({ key: 'n' + n.valor, titulo: n.valor + ' – ' + n.nombre, ancho: 30 })));
+      const ws4 = hoja('Rúbrica', 'Rúbrica de coevaluación (escala 1 a 5)', c4);
+      T.criterios.forEach((c, i) => { const r = fila(ws4, [c.nombre].concat(niv.map(n => c.descriptores[n.valor])), c4, i % 2 === 1); r.getCell(1).font = { bold: true }; });
+      ws4.addRow([]);
+      const nr = ws4.addRow(['Cálculo: nota = suma de los 5 niveles × 0,4 (máximo 25 × 0,4 = 10).']);
+      ws4.mergeCells(nr.number, 1, nr.number, c4.length); nr.getCell(1).font = { italic: true, size: 10 };
+    }
+
+    const buf = await wb.xlsx.writeBuffer();
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([texto], { type: 'text/csv;charset=utf-8' }));
-    a.download = 'coevaluacion_taller_futuro_acero.csv';
+    a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    a.download = 'Reporte_coevaluacion_Taller_II.xlsx';
     document.body.appendChild(a); a.click(); a.remove();
   }
 
   $('btnVer').addEventListener('click', () => { pin = $('pin').value; cargar(); });
   $('pin').addEventListener('keydown', (e) => { if (e.key === 'Enter') { pin = $('pin').value; cargar(); } });
   $('btnActualizar').addEventListener('click', cargar);
-  $('btnCSV').addEventListener('click', csv);
+  $('btnCSV').addEventListener('click', excel);
 })();
 </script>
 </body>

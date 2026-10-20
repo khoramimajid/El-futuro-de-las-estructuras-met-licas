@@ -50,6 +50,7 @@
       </div>
       <button class="volver" id="btnVolver">← Grupos</button>
     </div>
+    <p class="escala">Escala de cada criterio: <b>1</b> Insuficiente · <b>2</b> Regular · <b>3</b> Bueno · <b>4</b> Muy bueno · <b>5</b> Excelente. Cada criterio vale 2 puntos; la nota se calcula sobre 10.</p>
     <div id="criterios"></div>
     <div class="total"><span>Nota para este grupo</span><span class="nota"><span id="nota">–</span> / 10</span></div>
     <label class="campo" for="fortaleza">Lo mejor de la exposición <span style="font-weight:400;color:var(--suave)">(obligatorio)</span></label>
@@ -190,21 +191,27 @@
     T.criterios.forEach(c => {
       const div = document.createElement('div'); div.className = 'criterio';
       const nom = document.createElement('div'); nom.className = 'nom'; nom.textContent = c.nombre;
-      const desc = document.createElement('div'); desc.className = 'desc'; desc.textContent = c.descripcion;
       const niv = document.createElement('div'); niv.className = 'niveles'; niv.setAttribute('role', 'group'); niv.setAttribute('aria-label', c.nombre);
-      T.niveles.forEach(n => {
+      const desc = document.createElement('div'); desc.className = 'desc-nivel';
+      desc.textContent = 'Toque un nivel para ver su descripción.';
+      const ordenados = T.niveles.slice().sort((a, b) => a.valor - b.valor);  // Insuficiente → Excelente
+      ordenados.forEach(n => {
         const b = document.createElement('button');
         b.type = 'button'; b.className = 'nivel'; b.dataset.v = n.valor; b.setAttribute('aria-pressed', 'false');
+        b.title = c.descriptores[n.valor];
         const bb = document.createElement('b'); bb.textContent = n.valor;
-        b.append(bb, n.nombre);
+        const sp = document.createElement('span'); sp.textContent = n.nombre;
+        b.append(bb, sp);
         b.addEventListener('click', () => {
           estado.valores[c.id] = n.valor;
           niv.querySelectorAll('.nivel').forEach(x => x.setAttribute('aria-pressed', x === b ? 'true' : 'false'));
+          desc.textContent = n.nombre + ': ' + c.descriptores[n.valor];
+          desc.dataset.v = n.valor;
           actualizarTotal();
         });
         niv.appendChild(b);
       });
-      div.append(nom, desc, niv);
+      div.append(nom, niv, desc);
       cont.appendChild(div);
     });
     actualizarTotal();
@@ -214,7 +221,8 @@
   function completo() { return T.criterios.every(c => estado.valores[c.id] !== undefined); }
   function actualizarTotal() {
     const suma = T.criterios.reduce((s, c) => s + (estado.valores[c.id] || 0), 0);
-    $('nota').textContent = completo() ? suma : '–';
+    const nota = Math.round(suma * T.puntosPorNivel * 10) / 10;
+    $('nota').textContent = completo() ? String(nota).replace('.', ',') : '–';
     $('btnEnviar').disabled = !(completo() && $('fortaleza').value.trim().length >= 5);
   }
   $('fortaleza').addEventListener('input', actualizarTotal);
@@ -240,7 +248,7 @@
       if (!d.ok) { aviso($('avisoEval'), 'error', d.error || 'No se pudo guardar.'); $('btnEnviar').disabled = false; return; }
       estado.hechos.add(g.n);
       mostrarGrupos();
-      aviso($('progreso'), 'ok', '✓ Evaluación del Grupo ' + g.n + ' guardada (' + d.total + '/10). Elija el siguiente grupo.');
+      aviso($('progreso'), 'ok', '✓ Evaluación del Grupo ' + g.n + ' guardada (' + String(d.total).replace('.', ',') + '/10). Elija el siguiente grupo.');
       setTimeout(mostrarGrupos, 3500);
     } catch (e) {
       aviso($('avisoEval'), 'error', 'Sin conexión con el servidor. Su evaluación no se guardó: intente de nuevo.');

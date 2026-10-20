@@ -89,21 +89,29 @@ select:focus, input:focus, textarea:focus, button:focus-visible { outline: 3px s
 .criterio:first-of-type { border-top: none; }
 .criterio .nom { font-weight: 650; }
 .criterio .desc { font-size: 14px; color: var(--suave); margin: 2px 0 8px; }
-.niveles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.niveles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
 .nivel {
   font: inherit;
-  font-size: 14px;
-  padding: 10px 6px;
+  font-size: 11.5px;
+  line-height: 1.15;
+  padding: 8px 2px;
   border-radius: 10px;
   border: 1px solid var(--borde);
   background: #fff;
   cursor: pointer;
   color: var(--texto);
+  min-height: 56px;
 }
-.nivel b { display: block; font-size: 18px; }
-.nivel[aria-pressed="true"][data-v="0"] { background: var(--rojo-claro); border-color: var(--rojo); color: var(--rojo); }
-.nivel[aria-pressed="true"][data-v="1"] { background: var(--ambar-claro); border-color: var(--ambar); color: var(--ambar); }
-.nivel[aria-pressed="true"][data-v="2"] { background: var(--verde-claro); border-color: var(--verde); color: var(--verde); }
+.nivel b { display: block; font-size: 19px; margin-bottom: 2px; }
+.nivel[aria-pressed="true"] { color: #fff; border-color: transparent; }
+.nivel[aria-pressed="true"][data-v="1"] { background: #b3261e; }
+.nivel[aria-pressed="true"][data-v="2"] { background: #d9822b; }
+.nivel[aria-pressed="true"][data-v="3"] { background: #c9a227; }
+.nivel[aria-pressed="true"][data-v="4"] { background: #5f9e3a; }
+.nivel[aria-pressed="true"][data-v="5"] { background: #0a7a3f; }
+.desc-nivel { font-size: 13.5px; color: var(--suave); margin-top: 8px; padding: 8px 10px; background: #f6f8fb; border-radius: 8px; min-height: 36px; }
+.desc-nivel[data-v] { color: var(--texto); }
+.escala { font-size: 13px; color: var(--suave); background: var(--azul-claro); border-radius: 8px; padding: 8px 10px; margin: 0 0 4px; }
 .total { display: flex; justify-content: space-between; align-items: center; background: var(--azul-claro); border-radius: 10px; padding: 12px 14px; margin: 8px 0 4px; font-weight: 650; }
 .total .nota { font-size: 26px; color: var(--azul-osc); }
 .btn {
@@ -141,7 +149,7 @@ details ul { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
 .fila-botones .btn { width: auto; flex: 1 1 180px; }
 @media (max-width: 480px) {
   .barra h1 { font-size: 19px; }
-  .nivel { font-size: 13px; padding: 9px 4px; }
+  .nivel { font-size: 10.5px; padding: 7px 1px; }
 }
 
 #tablaGrupos td:nth-child(2) { min-width: 240px; }

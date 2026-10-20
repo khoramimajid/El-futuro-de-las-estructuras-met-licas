@@ -20,17 +20,54 @@ window.TALLER = {
     { n: 12, tema: 'Rehabilitación y ampliación vertical de edificios con acero',          integrantes: ['Moreira Cajas Jennifer Evelyn', 'Borja Molina Tatiana Abigail'] },
   ],
 
-  // Rúbrica sencilla: 5 criterios × 2 puntos = 10 puntos
-  criterios: [
-    { id: 'c1', nombre: 'Dominio del tema',        descripcion: 'Explican con seguridad qué es la tendencia y cómo funciona.' },
-    { id: 'c2', nombre: 'Proyecto real',           descripcion: 'Presentan un proyecto real y lo explican bien.' },
-    { id: 'c3', nombre: 'Arquitectura y Ecuador',  descripcion: 'Explican qué cambia para el arquitecto y si es viable en Ecuador.' },
-    { id: 'c4', nombre: 'Claridad y croquis',      descripcion: 'La exposición es clara y el croquis se entiende.' },
-    { id: 'c5', nombre: 'Tiempo y preguntas',      descripcion: 'Respetan los 2 minutos y responden bien la pregunta.' },
-  ],
+  // ---------------- RÚBRICA ----------------
+  // 5 criterios × 5 niveles. Cada criterio vale 2 puntos:
+  // nivel 5 = 2,0 · nivel 4 = 1,6 · nivel 3 = 1,2 · nivel 2 = 0,8 · nivel 1 = 0,4
+  // Nota final = suma de niveles × 0,4  →  máximo 25 × 0,4 = 10
+  // Puede cambiar los textos de "niveles" y "descriptores" sin tocar el Apps Script.
   niveles: [
-    { valor: 0, nombre: 'No cumple' },
-    { valor: 1, nombre: 'En parte' },
-    { valor: 2, nombre: 'Cumple bien' },
+    { valor: 5, nombre: 'Excelente' },
+    { valor: 4, nombre: 'Muy bueno' },
+    { valor: 3, nombre: 'Bueno' },
+    { valor: 2, nombre: 'Regular' },
+    { valor: 1, nombre: 'Insuficiente' },
   ],
+  criterios: [
+    { id: 'c1', nombre: 'Dominio del tema',
+      descriptores: {
+        5: 'Explican con total seguridad qué es la tendencia y cómo funciona, sin leer.',
+        4: 'Explican bien la tendencia, con pequeñas dudas.',
+        3: 'Explican lo básico; leen en algunos momentos.',
+        2: 'Explicación confusa o incompleta; leen casi todo.',
+        1: 'No se entiende qué es la tendencia.' } },
+    { id: 'c2', nombre: 'Proyecto real',
+      descriptores: {
+        5: 'Proyecto real bien elegido, con nombre, lugar, año y por qué es relevante.',
+        4: 'Proyecto real bien explicado; falta algún dato.',
+        3: 'Mencionan un proyecto real con poca explicación.',
+        2: 'Ejemplo genérico, dudoso o sin datos.',
+        1: 'No presentan un ejemplo real.' } },
+    { id: 'c3', nombre: 'Arquitectura y Ecuador',
+      descriptores: {
+        5: 'Explican qué cambia para el arquitecto y analizan con argumentos si es viable en Ecuador (sismo, costo, mano de obra).',
+        4: 'Relación clara con la arquitectura y con Ecuador, con poco análisis.',
+        3: 'Mencionan la arquitectura o Ecuador de forma general.',
+        2: 'Relación débil o superficial.',
+        1: 'No lo relacionan con la arquitectura ni con Ecuador.' } },
+    { id: 'c4', nombre: 'Claridad y croquis',
+      descriptores: {
+        5: 'Exposición muy ordenada; el croquis explica el concepto por sí solo.',
+        4: 'Exposición clara; croquis correcto.',
+        3: 'Se entiende, pero con algo de desorden; croquis básico.',
+        2: 'Difícil de seguir; croquis confuso.',
+        1: 'Desordenada y sin croquis.' } },
+    { id: 'c5', nombre: 'Tiempo y preguntas',
+      descriptores: {
+        5: 'Respetan los 2 minutos, responden con seguridad y participan ambos.',
+        4: 'Tiempo adecuado y buenas respuestas; participación algo desigual.',
+        3: 'Se pasan un poco del tiempo o responden a medias.',
+        2: 'Se pasan mucho del tiempo o responden mal.',
+        1: 'No respetan el tiempo ni responden la pregunta.' } },
+  ],
+  puntosPorNivel: 0.4,   // 5 niveles × 0,4 = 2 puntos por criterio
 };
